@@ -32,7 +32,9 @@ angular.module('adsApp', [])
 					ads.processDemand(demand_index);
 				}
 				ads.demands[demand_index].created = true;
-				ads.addDemand(demand_index+1);
+				if (typeof ads.demands[demand_index+1] != 'undefined') {
+					ads.addDemand(demand_index+1);
+				}
 			}, ads.demands[demand_index].incomming_time * 1000);
 		};
 
@@ -42,7 +44,7 @@ angular.module('adsApp', [])
 			ads.tProcessing = $timeout(function () {
 				ads.demands[ads.processing_index].executing = false;
 				ads.demands[ads.processing_index].complete = true;
-				if (ads.demands[demand_index + 1].created) {
+				if (typeof ads.demands[demand_index+1] != 'undefined' && ads.demands[demand_index + 1].created) {
 					ads.processDemand(ads.processing_index + 1);
 				} else {
 					ads.processing_index = null;
