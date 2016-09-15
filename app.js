@@ -13,7 +13,7 @@ angular.module('adsApp', [])
 		ads.tProcessing = null;//Timeout para processamento das demandas
 
 		ads.processing_index = null;
-		ads.unit_time = 1000;//1000 = 1 segundo
+		ads.unit_time = 10;//timeout = 1ms
 		ads.simulate = function () {
 			$timeout.cancel(ads.tIncomming);
 			$timeout.cancel(ads.tProcessing);
@@ -70,6 +70,6 @@ angular.module('adsApp', [])
 				totalQueueTime += ads.demands[i].time_in_queue;		
 			}
 
-			ads.queue_average = totalQueueTime/ads.demands.length/1000;
+			ads.queue_average = totalQueueTime/ads.demands.length/ads.unit_time;
 		};
 	}]);
