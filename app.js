@@ -14,6 +14,8 @@ angular.module('adsApp', [])
 
 		ads.processing_index = null;
 		ads.unit_time = 10;//timeout = 1ms
+		ads.servers = [];
+		ads.total_servers = 1;
 		ads.simulate = function () {
 			$timeout.cancel(ads.tIncomming);
 			$timeout.cancel(ads.tProcessing);
@@ -21,19 +23,39 @@ angular.module('adsApp', [])
 			ads.tIncomming = null;
 			ads.tProcessing = null;
 			ads.processing_index = null;
+			for (var i = 0; i < ads.servers.length; i++) {
+				ads.servers[i].wk.terminate();
+			}
+			ads.servers = [];
 
 			var demands_json = JSON.parse(ads.json_demands);
 			var service_json = JSON.parse(ads.json_service);
 			for (var i = 0; i < demands_json.length; i++) {
 				ads.demands[i] = {created: false, timestamp_enter_queue: null, time_in_queue : 0, code: i, incomming_time: demands_json[i], processing_time: service_json[i], executing: false, complete: false};
 			}
+
+			for (var server_index = 0; server_index < ads.total_servers; server_index++) {
+				ads.servers[server_index] = {working: false};
+				ads.servers[server_index].wk = new Worker("servidor.js");
+				ads.servers[server_index].wk.postMessage({action: 'iniciar', unit_time: ads.unit_time, server_index: server_index } );
+				ads.servers[server_index].wk.onmessage = function(e) {
+					ads.executeMessage(e.data);
+				}
+			}
+
 			ads.addDemand(0);
 		};
 
 		ads.addDemand = function (demand_index) {
 			ads.tIncomming = $timeout(function() {
-				if (ads.processing_index === null) {
-					ads.processDemand(demand_index);
+				var server_index = null;
+				for (var i = 0; i < ads.servers.length; i++) {//verifica se tem um servidor livre
+					if (!ads.servers[i].working) {
+						server_index = i;
+					}
+				}
+				if (server_index !== null) {
+					ads.processDemand(demand_index, server_index);
 				} else {
 					ads.demands[demand_index].timestamp_enter_queue = (new Date()).getTime();	
 				}
@@ -44,24 +66,14 @@ angular.module('adsApp', [])
 			}, ads.demands[demand_index].incomming_time * ads.unit_time);
 		};
 
-		ads.processDemand = function (demand_index) {
+		ads.processDemand = function (demand_index, server_index) {
+			ads.servers[server_index].working = true;
 			ads.processing_index = demand_index;
 			ads.demands[ads.processing_index].executing = true;
 			if (ads.demands[ads.processing_index].timestamp_enter_queue) {
 				ads.demands[ads.processing_index].time_in_queue = (new Date()).getTime() - ads.demands[ads.processing_index].timestamp_enter_queue;
 			}
-			ads.tProcessing = $timeout(function () {
-				ads.demands[ads.processing_index].executing = false;
-				ads.demands[ads.processing_index].complete = true;
-				if (typeof ads.demands[demand_index+1] != 'undefined' && ads.demands[demand_index + 1].created) {
-					ads.processDemand(ads.processing_index + 1);
-				} else {
-					if (ads.processing_index == ads.demands.length -1) {
-						ads.calcAverageTimeInQueue();
-					}
-					ads.processing_index = null;
-				}
-			}, ads.demands[ads.processing_index].processing_time * ads.unit_time);
+			ads.servers[server_index].wk.postMessage({action: 'processar', demanda: ads.demands[demand_index]});
 		};
 
 		ads.calcAverageTimeInQueue = function () {
@@ -70,6 +82,26 @@ angular.module('adsApp', [])
 				totalQueueTime += ads.demands[i].time_in_queue;		
 			}
 
-			ads.queue_average = totalQueueTime/ads.demands.length/ads.unit_time;
+			ads.queue_average = totalQueueTime/ads.demands.length/1000;
 		};
+
+		ads.executeMessage = function (message) {
+			var acao = message.action;
+
+			switch (acao) {
+				case "finalizar" :
+					ads.demands[message.demanda.code].executing = false;
+					ads.demands[message.demanda.code].complete = true;
+					ads.servers[message.servidor].working = false;
+					if (typeof ads.demands[ads.processing_index+1] != 'undefined' && ads.demands[ads.processing_index + 1].created) {
+						ads.processDemand(ads.processing_index + 1, message.servidor);
+					} else {
+						if (ads.processing_index == ads.demands.length -1) {
+							ads.calcAverageTimeInQueue();
+						}
+					}
+				break;
+			}
+			$scope.$apply();
+		}
 	}]);
